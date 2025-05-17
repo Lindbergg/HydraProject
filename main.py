@@ -52,9 +52,8 @@ def main():
     
     #print the players
     for player in players:
-        print(f"Player Name: {player.name}")
-        print(f"All Targets: {player.allTargets}")
-        print()
+        print(f"{player.name} {player.getDamage()}")
+        
     
         
 

@@ -4,3 +4,5 @@ class Player:
         self.allTargets = allTargets
 
 
+    def getDamage(self):
+        return self.allTargets[0]
