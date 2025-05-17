@@ -22,10 +22,13 @@ def read_csv_file(path):
 
 def main():
     # Path to the file containing CSV file
-    path = 'C:\Python\Hero Wars - Brasil - HydraHelperSheet.csv'
+    path = '.\Hero Wars - Brasil - HydraHelperSheet.csv'
     
     # Read CSV file
     DamageMatrix = read_csv_file(path)
+
+    #print the DataFrame
+    print(DamageMatrix)
 
 
    
