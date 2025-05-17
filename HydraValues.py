@@ -1,15 +1,31 @@
 class HydraValues:
-    def __init__(self):
-        self.column1 = "Common"
-        self.column2 = "Uncommon"
-        self.column3 = "Rare"
-        self.column4 = "Legendary"
+    hydraNames = [
+        "Common", "Elder", "Ancient", "Dreadful"
+    ]
 
-        self.herpderp = [
-            [25, 40, 70, 150],
-            [35, 50, 85, 190],
-            [40, 65, 110, 280],
-        ]
-        
-    def getvalue(self, x, y):
-        return self.herpderp[y][x]
+    scoreTableHydraNameHeadValue = [
+        [25, 40, 70, 150],
+        [35, 50, 85, 190],
+        [40, 65, 110, 280],
+        [45, 665, 120, 280],
+        [50, 765, 150, 280],
+        [80, 800, 170, 999],           
+    ]
+
+    @staticmethod
+    def getHydraIndex(hydra_name, rowIndex):
+        # Get the index of the hydra name
+        index = HydraValues.hydraNames.index(hydra_name)
+        # Get the value from the score table
+        value = HydraValues.scoreTableHydraNameHeadValue[rowIndex][index]
+        # Return the value as a string
+        return str(value)
+
+
+    @staticmethod
+    def TableValues():
+        return HydraValues.scoreTableHydraNameHeadValue
+
+    @staticmethod
+    def ListOfHydraNames():
+        return HydraValues.hydraNames
