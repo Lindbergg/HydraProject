@@ -85,7 +85,11 @@ def simulated_annealing(cycle, players, hydras, max_iter=10000, initial_temp=100
             if new_score > best_score:
                 best_score = new_score
                 best_assignment = {p: a[:] for p, a in new_assignment.items()}
-                print(f"New best score: {new_score} at iteration {i}")
+                
+                # print score, assignment in a readable format
+                
+                for player, attacks in best_assignment.items():
+                    print(f"New best score: {best_score} {player}: {', '.join([f'{h} - {hd}' for h, hd in attacks])}")
 
         # Cooling schedule
         temperature *= cooling_rate
@@ -186,7 +190,7 @@ def GameSim(players, hydras):
     print(f"Best total worth found: {best_score}")
 
     # Optionally apply best_assignment again to display final results
-    cycle.apply_assignment(best_assignment)
+    #cycle.apply_assignment(best_assignment)
     
 
 
