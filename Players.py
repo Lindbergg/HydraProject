@@ -1,6 +1,6 @@
 class Player:
-    def __init__(self, name, allTargest):
+    def __init__(self, name, allTargets):
         self.name = name
-        self.allTargest = allTargest
+        self.allTargets = allTargets
 
 
