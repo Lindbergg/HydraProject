@@ -12,14 +12,11 @@ class Head:
         self.worth = int(self.worth.replace(",", ""))
         
     def updateWorth(self):
-        # update the worth of the head
-        
         self.worthCounter += 1        
         old_worth = self.worth
-
         self.worth = HydraValues.getHydraIndex(self.parent.name, self.worthCounter)
         self.worth = int(self.worth.replace(",", ""))
-        print(f"Head {self.name} worth: {self.worth} (old: {old_worth})")
+        
 
     def reset(self):
         # Reset the head to its initial state

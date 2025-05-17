@@ -25,82 +25,72 @@ def read_file_csv(path):
     return df
 
 
+import random
+import math
+
 def simulated_annealing(cycle, players, hydras, max_iter=10000, initial_temp=100000, cooling_rate=0.999):
+    # Reset hydras and players
+    for hydra in hydras:
+        hydra.reset()
+    for player in players:
+        player.attacks_left = 3
+
     # Initialize random assignment: Each player attacks 3 random hydra heads
     assignment = {}
     for player in players:
         attacks = []
         for _ in range(3):
-            valid_hydras = [h for h in hydras if h.is_alive()]
+            valid_hydras = [h for h in hydras if h.is_alive() and h.heads]
             if not valid_hydras:
-                # No hydras alive, handle gracefully - e.g. break loop or return
-                break  # or raise Exception, or return some result
-
+                break  # No valid hydras to attack
             hydra = random.choice(valid_hydras)
             head = random.choice(hydra.heads)
             attacks.append((hydra.name, head.name))
         assignment[player.name] = attacks
 
-    for hydra in hydras:
-        hydra.reset()
-    for player in players:
-        player.attacks_left = 3  # Reset players' attacks left
     current_score = cycle.apply_assignment(assignment)
-    best_assignment = assignment.copy()
+    best_assignment = {p: a[:] for p, a in assignment.items()}
     best_score = current_score
     temperature = initial_temp
 
     for i in range(max_iter):
-        # Create a neighbor assignment by randomly changing one attack
-        new_assignment = {p: a[:] for p, a in assignment.items()}  # deep copy of lists
+        # Create a new neighbor assignment
+        new_assignment = {p: a[:] for p, a in assignment.items()}
 
-        # Randomly pick a player and attack index to mutate
-        p = random.choice(players).name
+        # Random player and attack index
+        player = random.choice(players).name
         attack_idx = random.randint(0, 2)
 
-        hydra = random.choice(hydras)
-        valid_hydras = [h for h in hydras if h.is_alive() and len(h.heads) > 0]
+        valid_hydras = [h for h in hydras if h.is_alive() and h.heads]
         if not valid_hydras:
             print("No valid hydras with heads!")
             break
         hydra = random.choice(valid_hydras)
         head = random.choice(hydra.heads)
-        new_assignment[p][attack_idx] = (hydra.name, head.name)
+        new_assignment[player][attack_idx] = (hydra.name, head.name)
 
-        # Reset hydras
+        # Reset hydras and players
         for h in hydras:
             h.reset()
+        for p in players:
+            p.attacks_left = 3
 
-        for player in players:
-            player.attacks_left = 3  # Reset players' attacks left
         new_score = cycle.apply_assignment(new_assignment)
-        
         delta = new_score - current_score
 
-        # Accept new assignment if better or with probability (simulated annealing)
+        # Accept if better or probabilistically
         if delta > 0 or random.random() < math.exp(delta / temperature):
             assignment = new_assignment
             current_score = new_score
             if new_score > best_score:
                 best_score = new_score
-                best_assignment = new_assignment
+                best_assignment = {p: a[:] for p, a in new_assignment.items()}
+                print(f"New best score: {new_score} at iteration {i}")
 
-        # Cool down temperature
+        # Cooling schedule
         temperature *= cooling_rate
         if temperature < 1e-3:
             break
-        
-        # Optionally print progress every 1000 iterations (avoid too much spam)
-        if i % 1000 == 0:
-            hydras_alive = [h for h in hydras if len(h.heads) > 0]
-            heads_alive = sum(len(h.heads) for h in hydras_alive)
-            print(f"Iteration {i}: Current score = {current_score}, Best score = {best_score}, Heads alive = {heads_alive}, Temp = {temperature:.2f}")
-            
-            # Optionally, you can print the current assignment players on what head
-            for player, attacks in assignment.items():
-                pass
-                #print(f"  {player}: {attacks}")
-        
 
     return best_assignment, best_score
 

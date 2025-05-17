@@ -2,10 +2,10 @@ class Cycle:
     def __init__(self, players, hydra):
         self.players = players  # list of Player objects
         self.hydra = hydra      # list of Hydra objects
+        self.current_value = 0
 
     def apply_assignment(self, assignment):
-        # assignment: dict {player_name: list of (hydra_name, head_name)}
-
+        self.current_value = 0
         # Reset hydra heads health and players attacks_left
         for hydra in self.hydra:
             for head in hydra.heads:
@@ -15,8 +15,7 @@ class Cycle:
             player.attacks_left = 3
 
         total_kills = 0
-        total_valle = 0
-
+        
         for player in self.players:
             attacks = assignment.get(player.name, [])
             for (hydra_name, head_name) in attacks:
@@ -38,7 +37,7 @@ class Cycle:
 
                 if head.health <= 0:
                     total_kills += 1
-                    total_valle += head.worth
+                    self.current_value += head.worth
                     hydra.HeadKilled()
 
-        return total_valle
+        return hydra.HeatlhLeft()
