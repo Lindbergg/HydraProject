@@ -181,7 +181,7 @@ if __name__ == "__main__":
         best_assignment = {}
         best_score = 0
         highest_value = 0
-        for i in range(1, 10):
+        for i in range(1, 25):
             hold, health_left, score = simulator.run_simulation()
             if(score > highest_value):
                 best_assignment = hold
