@@ -7,80 +7,60 @@ from Hydra import Hydra
 from Head import Head
 from Cycle import Cycle
 
+
 class HydraSimulator:
     def __init__(self, csv_path):
         self.csv_path = csv_path
         self.players = []
         self.hydras = []
 
-    def read_file_csv(self):
+    def read_csv(self):
         try:
-            df = pd.read_csv(self.csv_path, sep=',', engine='python')
-            return df
+            return pd.read_csv(self.csv_path, sep=',', engine='python')
         except Exception as e:
-            print(f"Error reading CSV file: {e}")
+            print(f"[ERROR] Failed to read CSV file: {e}")
             return None
 
     def load_data(self):
-        DamageMatrix = self.read_file_csv()
-        if DamageMatrix is None:
+        df = self.read_csv()
+        if df is None:
             return False
-        
-        self.players = []
-        for index, row in DamageMatrix.iterrows():
-            if index == DamageMatrix.shape[0] - 1:
-                continue  # skip last row (heads health)
-            damage_data = DamageMatrix.iloc[index, 1:].to_frame().T
-            damage_data.columns = DamageMatrix.columns[1:]
-            player = Player(row['Name'], damage_data)
-            self.players.append(player)
 
-        self.hydras = []
-        hydra_dict = {}
-        bottom_row = DamageMatrix.iloc[-1, 1:]
+        self.players.clear()
+        for index, row in df.iloc[:-1].iterrows():  # skip last row (heads health)
+            damage_data = row[1:].to_frame().T
+            damage_data.columns = df.columns[1:]
+            self.players.append(Player(row['Name'], damage_data))
 
-        for column in DamageMatrix.columns[1:]:
+        self.hydras.clear()
+        hydra_map = {}
+        health_row = df.iloc[-1, 1:]
+
+        for column in df.columns[1:]:
             try:
                 head_name, hydra_name = column.split(" - ")
             except ValueError:
-                print(f"Skipping malformed column header: {column}")
+                print(f"[WARN] Skipping malformed column header: {column}")
                 continue
 
-            if hydra_name == "Dreadful":
-                continue  # skip Dreadful hydras
-
-            if hydra_name not in hydra_dict:
-                hydra = Hydra(hydra_name, [])
-                hydra_dict[hydra_name] = hydra
+            hydra = hydra_map.setdefault(hydra_name, Hydra(hydra_name, []))
+            if hydra not in self.hydras:
                 self.hydras.append(hydra)
-            else:
-                hydra = hydra_dict[hydra_name]
 
-            health_str = bottom_row[column]
             try:
-                health_val = int(str(health_str).replace(",", ""))
+                health = int(str(health_row[column]).replace(",", ""))
             except ValueError:
-                print(f"Invalid health value for {column}: {health_str}")
+                print(f"[WARN] Invalid health value in column '{column}': {health_row[column]}")
                 continue
 
             head = Head(head_name, hydra)
-            head.startHealth = health_val
-            head.health = health_val
+            head.startHealth = health
+            head.health = health
             hydra.heads.append(head)
 
         return True
 
-    def simulated_annealing(self, cycle, max_iter=100000, initial_temp=1000, cooling_rate=0.995):
-        temperature = initial_temp
-        highest_value = 0
-
-        # Reset hydras and players
-        for hydra in self.hydras:
-            hydra.reset()
-        for player in self.players:
-            player.attacks_left = 3
-
-        # Initialize random assignment
+    def initialize_random_assignment(self):
         assignment = {}
         for player in self.players:
             attacks = []
@@ -92,116 +72,115 @@ class HydraSimulator:
                 head = random.choice([head for head in hydra.heads if head.is_alive()])
                 attacks.append((hydra.name, head.name))
             assignment[player.name] = attacks
+        return assignment
 
-        current_score, current_value = cycle.apply_assignment(assignment)
+    def reset_battle_state(self):
+        for hydra in self.hydras:
+            hydra.reset()
+        for player in self.players:
+            player.attacks_left = 3
+
+    def mutate_assignment(self, assignment):
+        new_assignment = {p: a[:] for p, a in assignment.items()}
+        mutations = 2 if random.random() < 0.1 else 1
+
+        for _ in range(mutations):
+            player_name = random.choice(self.players).name
+            attack_idx = random.randint(0, 2)
+            valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
+            if not valid_hydras:
+                break
+            hydra = random.choice(valid_hydras)
+            valid_heads = [head for head in hydra.heads if head.is_alive()]
+            if not valid_heads:
+                continue
+            head = random.choice(valid_heads)
+            new_assignment[player_name][attack_idx] = (hydra.name, head.name)
+
+        return new_assignment
+
+    def simulated_annealing(self, cycle, max_iter=10000, initial_temp=1000, cooling_rate=0.995):
+        temperature = initial_temp
+        best_score = 0
+
+        self.reset_battle_state()
+        assignment = self.initialize_random_assignment()
+
+        health_left, current_score = cycle.apply_assignment(assignment)
         best_assignment = {p: a[:] for p, a in assignment.items()}
-        hydras_health_left = current_score
 
         for i in range(max_iter):
             if temperature < 1:
                 break
-
-            # Reheat every 10,000 iterations
             if i > 0 and i % 10000 == 0:
-                temperature = initial_temp
+                temperature = initial_temp  # reheat
 
-            # Reset hydras and players before applying new assignment
-            for hydra in self.hydras:
-                hydra.reset()
-            for player in self.players:
-                player.attacks_left = 3
-
-            new_assignment = {p: a[:] for p, a in assignment.items()}
-
-            # 10% chance mutate 2 attacks, else 1
-            mutations = 2 if random.random() < 0.1 else 1
-            for _ in range(mutations):
-                player_name = random.choice(self.players).name
-                attack_idx = random.randint(0, 2)
-                valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
-                if not valid_hydras:
-                    print("No valid hydras with alive heads!")
-                    break
-                hydra = random.choice(valid_hydras)
-                valid_heads = [head for head in hydra.heads if head.is_alive()]
-                if not valid_heads:
-                    continue
-                head = random.choice(valid_heads)
-                new_assignment[player_name][attack_idx] = (hydra.name, head.name)
-
-            new_total_health_left, current_value = cycle.apply_assignment(new_assignment)
-            delta = current_score - new_total_health_left
+            self.reset_battle_state()
+            new_assignment = self.mutate_assignment(assignment)
+            new_health_left, new_score = cycle.apply_assignment(new_assignment)
+            delta = health_left - new_health_left
 
             if delta > 0 or random.random() < math.exp(delta / temperature):
                 assignment = new_assignment
-                current_score = new_total_health_left
+                health_left = new_health_left
 
-                if current_value > highest_value:
-                    highest_value = current_value
-                    hydras_health_left = new_total_health_left
+                if new_score > best_score:
+                    best_score = new_score
                     best_assignment = {p: a[:] for p, a in new_assignment.items()}
-                    print(f"Iteration {i} | Hydras health left: {hydras_health_left} | Current Value: {current_value} | Highest: {highest_value} | Temp: {temperature:.2f}")
-                else:
-                    if new_total_health_left < hydras_health_left:
-                        print(f"Iteration {i} | Score: {new_total_health_left} | Current Value: {current_value} | Highest: {highest_value} | Temp: {temperature:.2f}")
+                    print(f"[INFO] Iter {i} | New Best Score: {best_score} | Remaining Health: {health_left} | Temp: {temperature:.2f}")
+                elif new_health_left < health_left:
+                    print(f"[DEBUG] Iter {i} | Improved Health Left: {new_health_left} | Score: {new_score} | Temp: {temperature:.2f}")
 
             temperature *= cooling_rate
 
-        return best_assignment, hydras_health_left, highest_value
+        return best_assignment, health_left, best_score
 
     def run_simulation(self):
         if not self.players or not self.hydras:
-            print("Players or Hydras data missing, cannot simulate.")
-            return
+            print("[ERROR] Players or Hydras not initialized. Aborting simulation.")
+            return None, None, None
 
-        print("Starting simulation...")
+        print("[INFO] Starting simulation round...")
         cycle = Cycle(self.players, self.hydras)
-        best_assignment, best_score, highest_value = self.simulated_annealing(cycle)
+        best_assignment, health_left, score = self.simulated_annealing(cycle)
 
-        print(f"Best total health left found: {best_score} | Current Value: {highest_value}")
-        print("Sample from best assignment:")
+        print(f"[RESULT] Best assignment found | Remaining Hydra Health: {health_left} | Total Score: {score}")
         print("-" * 50)
         print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
 
-        for player, attack_list in best_assignment.items():
-            for hydra_name, head_name in attack_list:
-                # Only print for these two players as in original
-                if player == "raf41983" or player == "Freya":
+        for player, attacks in best_assignment.items():
+            if player in ("raf41983", "Freya"):
+                for hydra_name, head_name in attacks:
                     print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
-                else:
-                    break
-        print("-" * 50)
 
-        return best_assignment, best_score, highest_value
+        print("-" * 50)
+        return best_assignment, health_left, score
 
 
 if __name__ == "__main__":
     simulator = HydraSimulator(r'.\Hero Wars - Brasil - HydraHelperSheet.csv')
+
     if simulator.load_data():
         best_assignment = {}
-        best_score = 0
-        highest_value = 0
+        best_health_left = float('inf')
+        highest_score = 0
+
         for i in range(1, 25):
-            hold, health_left, score = simulator.run_simulation()
-            if(score > highest_value):
-                best_assignment = hold
-                best_score = health_left
-                highest_value = score
+            print(f"\n--- Running Simulation {i} ---")
+            assignment, health_left, score = simulator.run_simulation()
 
-            print(f"Simulation {i} completed.")
-            print("-" * 50)
-            print(f"top scores amongts 10 randomly seeded simulations total health left of hydras: {best_score} | Current Value: {highest_value}")
-            print("-" * 50)
+            if score > highest_score:
+                best_assignment = assignment
+                best_health_left = health_left
+                highest_score = score
 
-        print("Best assignment across all simulations:")
+            print(f"[SUMMARY] Simulation {i} complete. Best So Far | Health Left: {best_health_left} | Score: {highest_score}")
+            print("-" * 60)
+
+        print("\n[FINAL RESULT] Best assignment across all simulations:")
         print("-" * 50)
         print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
-        for player, attack_list in best_assignment.items():
-            for hydra_name, head_name in attack_list:
-                # Only print for these two players as in original
+        for player, attacks in best_assignment.items():
+            for hydra_name, head_name in attacks:
                 print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
-                
-            
-
-
-
+        print("-" * 50)
