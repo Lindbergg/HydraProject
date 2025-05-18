@@ -1,32 +1,34 @@
 class Cycle:
-    def __init__(self, players, hydra):
-        self.players = players  # list of Player objects
-        self.hydra = hydra      # list of Hydra objects
-        self.current_value = 0
+    def __init__(self, players, hydras):
+        self.players = players      # List[Player]
+        self.hydras = hydras        # List[Hydra]
+        self.current_value = 0      # Total worth from killed heads
 
     def apply_assignment(self, assignment):
         self.current_value = 0
-        # Reset hydra heads health and players attacks_left
-        for hydra in self.hydra:
-            for head in hydra.heads:
-                head.reset()  # you may need a method to restore initial HP
+
+        # Reset all hydra heads and players
+        for hydra in self.hydras:
+            hydra.reset()
 
         for player in self.players:
             player.attacks_left = 3
 
-        total_kills = 0
-        
+        # Apply attack assignments
         for player in self.players:
             attacks = assignment.get(player.name, [])
-            for (hydra_name, head_name) in attacks:
+            for hydra_name, head_name in attacks:
                 if player.attacks_left <= 0:
                     break
-                hydra = next((h for h in self.hydra if h.name == hydra_name), None)
-                if hydra is None:
+
+                hydra = next((h for h in self.hydras if h.name == hydra_name), None)
+                if not hydra:
                     continue
+
                 head = next((hd for hd in hydra.heads if hd.name == head_name), None)
-                if head is None or head.health <= 0:
+                if not head or head.health <= 0:
                     continue
+
                 damage = player.DamageToHead(hydra, head)
                 if damage <= 0:
                     continue
@@ -36,8 +38,12 @@ class Cycle:
                 player.attacks_left -= 1
 
                 if head.health <= 0:
-                    total_kills += 1
+                    head.health = 0
                     self.current_value += head.worth
-                    hydra.HeadKilled()
+                    hydra.on_head_killed()
 
-        return hydra.HeatlhLeft()
+        # Return total health left across all hydras
+        total_health_left = sum(
+            head.health for hydra in self.hydras for head in hydra.heads if head.health > 0
+        )
+        return total_health_left, self.current_value

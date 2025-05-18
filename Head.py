@@ -16,7 +16,10 @@ class Head:
         old_worth = self.worth
         self.worth = HydraValues.getHydraIndex(self.parent.name, self.worthCounter)
         self.worth = int(self.worth.replace(",", ""))
-        
+    
+    def is_alive(self):
+        # Check if the head is alive
+        return self.health > 0
 
     def reset(self):
         # Reset the head to its initial state

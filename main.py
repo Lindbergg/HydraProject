@@ -1,7 +1,4 @@
-# import .csv from path in the below method #
 import pandas as pd
-import os
-import numpy as np
 import random
 import math
 
@@ -10,193 +7,201 @@ from Hydra import Hydra
 from Head import Head
 from Cycle import Cycle
 
-# sample data in multline commet
-"""
-Name                   , Darkness - Dreadful, Water - Dreadful, Earth - Dreadful, Light - Dreadful, Wind - Dreadful, Fire - Dreadful, Darkness - Ancient, Water - Ancient, Earth - Ancient, Light - Ancient, Wind - Ancient, Fire - Ancient, Darkness - Elder, Water - Elder, Earth - Elder, Light - Elder, Wind - Elder, Fire - Elder, Darkness - Common, Water - Common, Earth - Common, Light - Common, Wind - Common, Fire - Common
-raf41983               , "60,295,650"       , 0               , 0               , "65,497,757"    , 0              , "106,981,939"  , "54,533,157"      , "39,451,447"   , "36,133,447"   , "54,533,157"   , "34,528,524"  , "54,533,157"  , 0               , 0            , 0            , 0            , "17,699,730", 0           , 0                , 0             , 0             , 0             , 0            , 0
-Virus                  , 0                  , 0               , 0               , 0               , 0              , 0              , "1,606,936"       , "9,686,171"    , "1,518,712"    , "7,581,136"    , "1,176,017"   , "15,675,659"  , "12,838,616"    , "12,240,813" , "5,462,147"  , "7,547,913"  , "11,780,448", "15,546,713", 0                , 0             , 0             , 0             , 0            , "5,946,906"
-wojownik               , 0                  , 0               , 0               , 0               , 0              , 0              , 0                 , "6,859,851"    , "2,591,022"    , 0              , "3,740,388"   , "15,064,513"  , "13,489,869"    , "9,861,676"  , "7,050,947"  , "8,635,407"  , 0           , "13,780,247", 0                , 0             , 0             , 0             , 0            , 0
-.++ Japanese Characters, 0                  , 0               , 0               , 0               , 0              , 0              , "692,165"         , "6,256,132"    , "808,046"      , "5,425,548"    , "641,439"     , "11,704,959"  , "13,122,459"    , "11,030,479" , "9,743,833"  , "9,467,052"  , "12,947,519", "14,668,240", "5,946,906"      , "5,946,906"   , "5,234,295"   , "5,946,906"   , 0            , 0
-xIIHOBBITIIx           , 0                  , 0               , 0               , 0               , 0              , "577,795"      , "7,129,459"       , "5,861,338"    , "2,015,873"    , 0              , "539,619"     , "15,648,435"  , "12,896,488"    , "12,691,457" , "4,908,820"  , "5,421,476"  , 0           , "13,988,022", "5,946,906"      , "5,946,906"   , 0             , 0             , 0            , "5,946,906"
-"""
+class HydraSimulator:
+    def __init__(self, csv_path):
+        self.csv_path = csv_path
+        self.players = []
+        self.hydras = []
 
-def read_file_csv(path):
-    df = pd.read_csv(path, sep=',', engine='python')
-    return df
+    def read_file_csv(self):
+        try:
+            df = pd.read_csv(self.csv_path, sep=',', engine='python')
+            return df
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            return None
 
+    def load_data(self):
+        DamageMatrix = self.read_file_csv()
+        if DamageMatrix is None:
+            return False
+        
+        self.players = []
+        for index, row in DamageMatrix.iterrows():
+            if index == DamageMatrix.shape[0] - 1:
+                continue  # skip last row (heads health)
+            damage_data = DamageMatrix.iloc[index, 1:].to_frame().T
+            damage_data.columns = DamageMatrix.columns[1:]
+            player = Player(row['Name'], damage_data)
+            self.players.append(player)
 
-import random
-import math
+        self.hydras = []
+        hydra_dict = {}
+        bottom_row = DamageMatrix.iloc[-1, 1:]
 
-def simulated_annealing(cycle, players, hydras, max_iter=10000, initial_temp=100000, cooling_rate=0.999):
-    # Reset hydras and players
-    for hydra in hydras:
-        hydra.reset()
-    for player in players:
-        player.attacks_left = 3
+        for column in DamageMatrix.columns[1:]:
+            try:
+                head_name, hydra_name = column.split(" - ")
+            except ValueError:
+                print(f"Skipping malformed column header: {column}")
+                continue
 
-    # Initialize random assignment: Each player attacks 3 random hydra heads
-    assignment = {}
-    for player in players:
-        attacks = []
-        for _ in range(3):
-            valid_hydras = [h for h in hydras if h.is_alive() and h.heads]
-            if not valid_hydras:
-                break  # No valid hydras to attack
-            hydra = random.choice(valid_hydras)
-            head = random.choice(hydra.heads)
-            attacks.append((hydra.name, head.name))
-        assignment[player.name] = attacks
+            if hydra_name == "Dreadful":
+                continue  # skip Dreadful hydras
 
-    current_score = cycle.apply_assignment(assignment)
-    best_assignment = {p: a[:] for p, a in assignment.items()}
-    best_score = current_score
-    temperature = initial_temp
+            if hydra_name not in hydra_dict:
+                hydra = Hydra(hydra_name, [])
+                hydra_dict[hydra_name] = hydra
+                self.hydras.append(hydra)
+            else:
+                hydra = hydra_dict[hydra_name]
 
-    for i in range(max_iter):
-        # Create a new neighbor assignment
-        new_assignment = {p: a[:] for p, a in assignment.items()}
+            health_str = bottom_row[column]
+            try:
+                health_val = int(str(health_str).replace(",", ""))
+            except ValueError:
+                print(f"Invalid health value for {column}: {health_str}")
+                continue
 
-        # Random player and attack index
-        player = random.choice(players).name
-        attack_idx = random.randint(0, 2)
+            head = Head(head_name, hydra)
+            head.startHealth = health_val
+            head.health = health_val
+            hydra.heads.append(head)
 
-        valid_hydras = [h for h in hydras if h.is_alive() and h.heads]
-        if not valid_hydras:
-            print("No valid hydras with heads!")
-            break
-        hydra = random.choice(valid_hydras)
-        head = random.choice(hydra.heads)
-        new_assignment[player][attack_idx] = (hydra.name, head.name)
+        return True
+
+    def simulated_annealing(self, cycle, max_iter=100000, initial_temp=1000, cooling_rate=0.995):
+        temperature = initial_temp
+        highest_value = 0
 
         # Reset hydras and players
-        for h in hydras:
-            h.reset()
-        for p in players:
-            p.attacks_left = 3
+        for hydra in self.hydras:
+            hydra.reset()
+        for player in self.players:
+            player.attacks_left = 3
 
-        new_score = cycle.apply_assignment(new_assignment)
-        delta = new_score - current_score
+        # Initialize random assignment
+        assignment = {}
+        for player in self.players:
+            attacks = []
+            for _ in range(3):
+                valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
+                if not valid_hydras:
+                    break
+                hydra = random.choice(valid_hydras)
+                head = random.choice([head for head in hydra.heads if head.is_alive()])
+                attacks.append((hydra.name, head.name))
+            assignment[player.name] = attacks
 
-        # Accept if better or probabilistically
-        if delta > 0 or random.random() < math.exp(delta / temperature):
-            assignment = new_assignment
-            current_score = new_score
-            if new_score > best_score:
-                best_score = new_score
-                best_assignment = {p: a[:] for p, a in new_assignment.items()}
-                
-                # print score, assignment in a readable format
-                
-                for player, attacks in best_assignment.items():
-                    print(f"New best score: {best_score} {player}: {', '.join([f'{h} - {hd}' for h, hd in attacks])}")
+        current_score, current_value = cycle.apply_assignment(assignment)
+        best_assignment = {p: a[:] for p, a in assignment.items()}
+        hydras_health_left = current_score
 
-        # Cooling schedule
-        temperature *= cooling_rate
-        if temperature < 1e-3:
-            break
+        for i in range(max_iter):
+            if temperature < 1:
+                break
 
-    return best_assignment, best_score
+            # Reheat every 10,000 iterations
+            if i > 0 and i % 10000 == 0:
+                temperature = initial_temp
 
+            # Reset hydras and players before applying new assignment
+            for hydra in self.hydras:
+                hydra.reset()
+            for player in self.players:
+                player.attacks_left = 3
 
-def initialize_hydras_and_heads(DamageMatrix):
-    hydras = []
-    hydra_dict = {}
-    bottom_row = DamageMatrix.iloc[-1, 1:]
+            new_assignment = {p: a[:] for p, a in assignment.items()}
 
-    for column in DamageMatrix.columns[1:]:
-        parts = column.split(" - ")
-        if len(parts) != 2:
-            print(f"Skipping malformed column: {column}")
-            continue
-        head_name, hydra_name = parts
-        
-        hydra = hydra_dict.setdefault(hydra_name, Hydra(hydra_name, []))
-        if hydra not in hydras:
-            hydras.append(hydra)
+            # 10% chance mutate 2 attacks, else 1
+            mutations = 2 if random.random() < 0.1 else 1
+            for _ in range(mutations):
+                player_name = random.choice(self.players).name
+                attack_idx = random.randint(0, 2)
+                valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
+                if not valid_hydras:
+                    print("No valid hydras with alive heads!")
+                    break
+                hydra = random.choice(valid_hydras)
+                valid_heads = [head for head in hydra.heads if head.is_alive()]
+                if not valid_heads:
+                    continue
+                head = random.choice(valid_heads)
+                new_assignment[player_name][attack_idx] = (hydra.name, head.name)
 
-        health_str = bottom_row[column]
-        try:
-            health_val = int(str(health_str).replace(",", ""))
-        except Exception as e:
-            print(f"Invalid health value for column '{column}': {health_str}")
-            continue
-        
-        head = Head(head_name, hydra)
-        head.startHealth = health_val
-        head.health = health_val
-        hydra.heads.append(head)
-    
-    return hydras
+            new_total_health_left, current_value = cycle.apply_assignment(new_assignment)
+            delta = current_score - new_total_health_left
 
-def main():
-    # Path to CSV file
-    path = r'.\Hero Wars - Brasil - HydraHelperSheet.csv'
-    
-    # Read CSV file
-    DamageMatrix = read_file_csv(path)
+            if delta > 0 or random.random() < math.exp(delta / temperature):
+                assignment = new_assignment
+                current_score = new_total_health_left
 
-    # Create players from rows (except last row)
-    players = []
-    for index, row in DamageMatrix.iterrows():
-        if index == DamageMatrix.shape[0] - 1:
-            # Skip last row, which contains health info for heads
-            continue
-        
-        # Create a DataFrame with the damage columns for this player (1 row, all columns except Name)
-        dataframeRowWithHeaders = DamageMatrix.iloc[index, 1:].to_frame().T
-        dataframeRowWithHeaders.columns = DamageMatrix.columns[1:]
-        
-        player = Player(row['Name'], dataframeRowWithHeaders)
-        players.append(player)
-    
-    # Create hydras and heads from column headers
-    hydras = []
-    hydra_dict = {}
+                if current_value > highest_value:
+                    highest_value = current_value
+                    hydras_health_left = new_total_health_left
+                    best_assignment = {p: a[:] for p, a in new_assignment.items()}
+                    print(f"Iteration {i} | Hydras health left: {hydras_health_left} | Current Value: {current_value} | Highest: {highest_value} | Temp: {temperature:.2f}")
+                else:
+                    if new_total_health_left < hydras_health_left:
+                        print(f"Iteration {i} | Score: {new_total_health_left} | Current Value: {current_value} | Highest: {highest_value} | Temp: {temperature:.2f}")
 
-    # Last row contains heads health per column
-    bottomRow = DamageMatrix.iloc[DamageMatrix.shape[0] - 1, 1:]
-    
-    for column in DamageMatrix.columns[1:]:
-        head_name, hydra_name = column.split(" - ")
+            temperature *= cooling_rate
 
-        if hydra_name == "Dreadful":
-            # Skip Dreadful hydras
-            continue
+        return best_assignment, hydras_health_left, highest_value
 
-        if hydra_name not in hydra_dict:
-            hydra = Hydra(hydra_name, [])
-            hydra_dict[hydra_name] = hydra
-            hydras.append(hydra)
-        else:
-            hydra = hydra_dict[hydra_name]
+    def run_simulation(self):
+        if not self.players or not self.hydras:
+            print("Players or Hydras data missing, cannot simulate.")
+            return
 
-        head = Head(head_name, hydra)
-        health_str = bottomRow[column]
-        head.startHealth = int(health_str.replace(",", ""))
-        head.health = head.startHealth
+        print("Starting simulation...")
+        cycle = Cycle(self.players, self.hydras)
+        best_assignment, best_score, highest_value = self.simulated_annealing(cycle)
 
-        hydra.heads.append(head)
+        print(f"Best total health left found: {best_score} | Current Value: {highest_value}")
+        print("Sample from best assignment:")
+        print("-" * 50)
+        print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
 
-    return players, hydras
-       
+        for player, attack_list in best_assignment.items():
+            for hydra_name, head_name in attack_list:
+                # Only print for these two players as in original
+                if player == "raf41983" or player == "Freya":
+                    print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+                else:
+                    break
+        print("-" * 50)
 
-def GameSim(players, hydras):
-    print("Starting simulation...")
-    cycle = Cycle(players, hydras)
-
-    best_assignment, best_score = simulated_annealing(cycle, players, hydras)
-
-    print(f"Best total worth found: {best_score}")
-
-    # Optionally apply best_assignment again to display final results
-    #cycle.apply_assignment(best_assignment)
-    
+        return best_assignment, best_score, highest_value
 
 
 if __name__ == "__main__":
-    # Call the main function
-    players, hydras = main()
-    
-    GameSim(players, hydras)
-    
+    simulator = HydraSimulator(r'.\Hero Wars - Brasil - HydraHelperSheet.csv')
+    if simulator.load_data():
+        best_assignment = {}
+        best_score = 0
+        highest_value = 0
+        for i in range(1, 10):
+            hold, health_left, score = simulator.run_simulation()
+            if(score > highest_value):
+                best_assignment = hold
+                best_score = health_left
+                highest_value = score
+
+            print(f"Simulation {i} completed.")
+            print("-" * 50)
+            print(f"top scores amongts 10 randomly seeded simulations total health left of hydras: {best_score} | Current Value: {highest_value}")
+            print("-" * 50)
+
+        print("Best assignment across all simulations:")
+        print("-" * 50)
+        print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
+        for player, attack_list in best_assignment.items():
+            for hydra_name, head_name in attack_list:
+                # Only print for these two players as in original
+                print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+                
+            
+
+
+

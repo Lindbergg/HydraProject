@@ -1,29 +1,23 @@
 class Hydra:
     def __init__(self, name, heads):
-        self.name = name
-        self.heads = heads
-        
+        self.name = name        # str
+        self.heads = heads      # List[Head]
+
     def reset(self):
         for head in self.heads:
             head.reset()
 
     def is_alive(self):
-        return len(self.heads) > 0
+        return any(head.health > 0 for head in self.heads)
 
-    def HeadKilled(self):
-        #update all other heads worth
+    def on_head_killed(self):
+        # Update the worth of all remaining heads
         for head in self.heads:
             if head.health > 0:
                 head.updateWorth()
-                
-    def HeatlhLeft(self):
-        total_health = 0
-        for head in self.heads:
-            total_health += head.health
-        return total_health
-        
 
+    def total_health_left(self):
+        return sum(head.health for head in self.heads if head.health > 0)
 
-    # hashcode for the hydra
     def __hash__(self):
         return hash(self.name)
