@@ -58,6 +58,9 @@ class HydraSimulator:
             head.health = health
             hydra.heads.append(head)
 
+        # Save the order of target columns (exclude first column like 'Name')
+        self.target_order = list(df.columns[1:])
+
         return True
 
     def initialize_random_assignment(self):
@@ -186,6 +189,60 @@ class HydraSimulator:
         print("[INFO] Starting brute force simulation round...")
         cycle = Cycle(self.players, self.hydras)
         return cycle.brute_force(max_attempts=10000)
+    
+    def print_assignment_summary(self, assignment, score):
+        from collections import defaultdict
+
+        summary = defaultdict(list)
+
+        # Build summary dictionary
+        for player in self.players:
+            if player.name not in assignment:
+                continue
+            for hydra_name, head_name in assignment[player.name]:
+                key = f"{head_name} - {hydra_name}"  # format must match CSV header exactly
+                hydra = next((h for h in self.hydras if h.name == hydra_name), None)
+                if not hydra:
+                    continue
+                head = next((hd for hd in hydra.heads if hd.name == head_name), None)
+                if not head:
+                    continue
+                damage = player.DamageToHead(hydra, head)
+                summary[key].append((player.name, damage))
+
+        print("\n[DETAILED TARGET BREAKDOWN]")
+        print("-" * 50)
+
+        # Print by original CSV order
+        for target in self.target_order:
+            if target not in summary:
+                continue
+            print(f"\n{target}:")
+            total = 0
+            for player_name, damage in summary[target]:
+                total += damage
+                print(f"  {player_name:<20} {damage:>12,}")
+            print(f"{'TOTAL':<22} {total:>12,}")
+
+        print("-" * 50)
+
+        # Count total heads killed (health <= 0)
+        heads_killed = 0
+        total_heads = 0
+        for hydra in self.hydras:
+            for head in hydra.heads:
+                total_heads += 1
+                if head.health <= 0:
+                    heads_killed += 1
+
+        # Print final summary
+        print("\n[FINAL SUMMARY]")
+        print(f"Total heads killed: {heads_killed} / {total_heads}")
+        print(f"Total score: {score:,}")
+
+
+
+   
         
 
 if __name__ == "__main__":
@@ -216,6 +273,7 @@ if __name__ == "__main__":
                 for hydra_name, head_name in attacks:
                     print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
             print("-" * 50)
+            simulator.print_assignment_summary(best_assignment, highest_score)
         else:
             print("[INFO] Running brute force simulation...")
             best_assignment, score = simulator.runBruteforce()
