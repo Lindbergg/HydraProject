@@ -16,10 +16,4 @@ class Player:
              
         else:
             print(f"Head {expected_column} NOT found in maxDmgs columns.")
-            
-        
-        
-
-
-        
         return 0

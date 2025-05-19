@@ -1,21 +1,19 @@
 from HydraValues import HydraValues
 
 class Head:
-    def __init__(self, name, hydra):
+    def __init__(self, name, hydra, health=1000000):  # allow passing health
         self.parent = hydra
         self.name = name
-        self.startHealth = 2000000000000
-        self.health = 2000000000000
+        self.startHealth = health
+        self.health = health
         self.worthCounter = 0
         self.alive = True
         self.worth = HydraValues.getHydraIndex(hydra.name, self.worthCounter)
-        self.worth = int(self.worth.replace(",", ""))
-        
+
     def updateWorth(self):
-        self.worthCounter += 1        
-        old_worth = self.worth
+        self.worthCounter += 1
         self.worth = HydraValues.getHydraIndex(self.parent.name, self.worthCounter)
-        self.worth = int(self.worth.replace(",", ""))
+
     
     def is_alive(self):
         # Check if the head is alive
@@ -27,4 +25,6 @@ class Head:
         self.worthCounter = 0
         self.alive = True
         self.worth = HydraValues.getHydraIndex(self.parent.name, self.worthCounter)
-        self.worth = int(self.worth.replace(",", ""))
+
+    def __repr__(self):
+        return f"{self.name}({self.health}, worth={self.worth})"

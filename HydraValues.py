@@ -14,12 +14,9 @@ class HydraValues:
 
     @staticmethod
     def getHydraIndex(hydra_name, rowIndex):
-        # Get the index of the hydra name
         index = HydraValues.hydraNames.index(hydra_name)
-        # Get the value from the score table
-        value = HydraValues.scoreTableHydraNameHeadValue[rowIndex][index]
-        # Return the value as a string
-        return str(value)
+        rowIndex = min(rowIndex, len(HydraValues.scoreTableHydraNameHeadValue) - 1)
+        return HydraValues.scoreTableHydraNameHeadValue[rowIndex][index]
 
 
     @staticmethod

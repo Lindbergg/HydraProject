@@ -21,3 +21,6 @@ class Hydra:
 
     def __hash__(self):
         return hash(self.name)
+    
+    def __repr__(self):
+        return f"Hydra({self.name}): {[str(h) for h in self.heads]}"

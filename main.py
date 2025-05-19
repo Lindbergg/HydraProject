@@ -82,58 +82,80 @@ class HydraSimulator:
 
     def mutate_assignment(self, assignment):
         new_assignment = {p: a[:] for p, a in assignment.items()}
-        mutations = 2 if random.random() < 0.1 else 1
+        mutations = 2 if random.random() < 0.2 else 1
 
+        retry_limit = 5
         for _ in range(mutations):
-            player_name = random.choice(self.players).name
-            attack_idx = random.randint(0, 2)
-            valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
-            if not valid_hydras:
-                break
-            hydra = random.choice(valid_hydras)
-            valid_heads = [head for head in hydra.heads if head.is_alive()]
-            if not valid_heads:
-                continue
-            head = random.choice(valid_heads)
-            new_assignment[player_name][attack_idx] = (hydra.name, head.name)
+            retry_count = 0
+            while retry_count < retry_limit:
+                player_name = random.choice(self.players).name
+                attack_idx = random.randint(0, 2)
+                valid_hydras = [h for h in self.hydras if h.is_alive() and any(head.is_alive() for head in h.heads)]
+                if not valid_hydras:
+                    break
+                hydra = random.choice(valid_hydras)
+                valid_heads = [head for head in hydra.heads if head.is_alive()]
+                if not valid_heads:
+                    retry_count += 1
+                    continue
+                head = random.choice(valid_heads)
+
+                if new_assignment[player_name][attack_idx] != (hydra.name, head.name):
+                    new_assignment[player_name][attack_idx] = (hydra.name, head.name)
+                    break
+                else:
+                    retry_count += 1
+            # If retries exhausted, just skip this mutation
 
         return new_assignment
 
-    def simulated_annealing(self, cycle, max_iter=10000, initial_temp=1000, cooling_rate=0.995):
+    def simulated_annealing(self, cycle, max_iter=20000, initial_temp=1000, cooling_rate=0.995):
         temperature = initial_temp
         best_score = 0
+        no_improve_counter = 0
+        patience = 2000
 
         self.reset_battle_state()
         assignment = self.initialize_random_assignment()
-
-        health_left, current_score = cycle.apply_assignment(assignment)
+        current_score = cycle.apply_assignment(assignment)
         best_assignment = {p: a[:] for p, a in assignment.items()}
 
         for i in range(max_iter):
-            if temperature < 1:
+            if temperature < 1e-5:
+                print("[INFO] Temperature too low, stopping.")
                 break
-            if i > 0 and i % 10000 == 0:
+
+            if i > 0 and i % 2000 == 0:
                 temperature = initial_temp  # reheat
+                print(f"[INFO] Reheating temperature at iteration {i}")
 
             self.reset_battle_state()
             new_assignment = self.mutate_assignment(assignment)
-            new_health_left, new_score = cycle.apply_assignment(new_assignment)
-            delta = health_left - new_health_left
+            new_score = cycle.apply_assignment(new_assignment)
+            delta = new_score - current_score
 
             if delta > 0 or random.random() < math.exp(delta / temperature):
                 assignment = new_assignment
-                health_left = new_health_left
+                current_score = new_score
 
                 if new_score > best_score:
                     best_score = new_score
                     best_assignment = {p: a[:] for p, a in new_assignment.items()}
-                    print(f"[INFO] Iter {i} | New Best Score: {best_score} | Remaining Health: {health_left} | Temp: {temperature:.2f}")
-                elif new_health_left < health_left:
-                    print(f"[DEBUG] Iter {i} | Improved Health Left: {new_health_left} | Score: {new_score} | Temp: {temperature:.2f}")
+                    no_improve_counter = 0
+                    print(f"[INFO] Iter {i} | New Best Score: {best_score} | Temp: {temperature:.4f}")
+                else:
+                    no_improve_counter += 1
+            else:
+                no_improve_counter += 1
+
+            # Optional early stopping if stuck
+            if no_improve_counter > patience:
+                print(f"[INFO] No improvement for {patience} iterations, stopping early.")
+                break
 
             temperature *= cooling_rate
 
-        return best_assignment, health_left, best_score
+        return best_assignment, best_score
 
     def run_simulation(self):
         if not self.players or not self.hydras:
@@ -142,9 +164,9 @@ class HydraSimulator:
 
         print("[INFO] Starting simulation round...")
         cycle = Cycle(self.players, self.hydras)
-        best_assignment, health_left, score = self.simulated_annealing(cycle)
+        best_assignment, score = self.simulated_annealing(cycle)
 
-        print(f"[RESULT] Best assignment found | Remaining Hydra Health: {health_left} | Total Score: {score}")
+        print(f"[RESULT] Best assignment found | Total Score: {score}")
         print("-" * 50)
         print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
 
@@ -154,33 +176,53 @@ class HydraSimulator:
                     print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
 
         print("-" * 50)
-        return best_assignment, health_left, score
+        return best_assignment, score
 
+    def runBruteforce(self):
+        if not self.players or not self.hydras:
+            print("[ERROR] Players or Hydras not initialized. Aborting simulation.")
+            return None, None, None
+
+        print("[INFO] Starting brute force simulation round...")
+        cycle = Cycle(self.players, self.hydras)
+        return cycle.brute_force(max_attempts=10000)
+        
 
 if __name__ == "__main__":
     simulator = HydraSimulator(r'.\Hero Wars - Brasil - HydraHelperSheet.csv')
+    input_string = input("press SA to start simulated annealing, otherwise press any for brute force: ")
+    
 
     if simulator.load_data():
         best_assignment = {}
-        best_health_left = float('inf')
         highest_score = 0
 
-        for i in range(1, 25):
-            print(f"\n--- Running Simulation {i} ---")
-            assignment, health_left, score = simulator.run_simulation()
+        if input_string == "SA":
+            for i in range(1, 100):
+                print(f"\n--- Running Simulation {i} ---")
+                assignment, score = simulator.run_simulation()
 
-            if score > highest_score:
-                best_assignment = assignment
-                best_health_left = health_left
-                highest_score = score
+                if score > highest_score:
+                    best_assignment = assignment
+                    highest_score = score
 
-            print(f"[SUMMARY] Simulation {i} complete. Best So Far | Health Left: {best_health_left} | Score: {highest_score}")
-            print("-" * 60)
+                print(f"[SUMMARY] Simulation {i} complete. Best So Far | Score: {highest_score}")
+                print("-" * 60)
 
-        print("\n[FINAL RESULT] Best assignment across all simulations:")
-        print("-" * 50)
-        print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
-        for player, attacks in best_assignment.items():
-            for hydra_name, head_name in attacks:
-                print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
-        print("-" * 50)
+            print("\n[FINAL RESULT] Best assignment across all simulations:")
+            print("-" * 50)
+            print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
+            for player, attacks in best_assignment.items():
+                for hydra_name, head_name in attacks:
+                    print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+            print("-" * 50)
+        else:
+            print("[INFO] Running brute force simulation...")
+            best_assignment, score = simulator.runBruteforce()
+            #print assignment
+            print(f"[RESULT] Best assignment found | Total Score: {score}")
+            print("-" * 50)
+            for best in best_assignment:
+                print(f"{best}")
+            print("-" * 50)
+    
