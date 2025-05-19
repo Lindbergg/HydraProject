@@ -1,11 +1,14 @@
 import pandas as pd
 import random
 import math
+import os
+
 
 from Player import Player
 from Hydra import Hydra
 from Head import Head
 from Cycle import Cycle
+
 
 
 class HydraSimulator:
@@ -116,7 +119,7 @@ class HydraSimulator:
         temperature = initial_temp
         best_score = 0
         no_improve_counter = 0
-        patience = 2000
+        patience = 5000
 
         self.reset_battle_state()
         assignment = self.initialize_random_assignment()
@@ -125,12 +128,12 @@ class HydraSimulator:
 
         for i in range(max_iter):
             if temperature < 1e-5:
-                print("[INFO] Temperature too low, stopping.")
+                #print("[INFO] Temperature too low, stopping.")
                 break
 
             if i > 0 and i % 2000 == 0:
                 temperature = initial_temp  # reheat
-                print(f"[INFO] Reheating temperature at iteration {i}")
+                #print(f"[INFO] Reheating temperature at iteration {i}")
 
             self.reset_battle_state()
             new_assignment = self.mutate_assignment(assignment)
@@ -145,7 +148,7 @@ class HydraSimulator:
                     best_score = new_score
                     best_assignment = {p: a[:] for p, a in new_assignment.items()}
                     no_improve_counter = 0
-                    print(f"[INFO] Iter {i} | New Best Score: {best_score} | Temp: {temperature:.4f}")
+                    #print(f"[INFO] Iter {i} | New Best Score: {best_score} | Temp: {temperature:.4f}")
                 else:
                     no_improve_counter += 1
             else:
@@ -153,7 +156,7 @@ class HydraSimulator:
 
             # Optional early stopping if stuck
             if no_improve_counter > patience:
-                print(f"[INFO] No improvement for {patience} iterations, stopping early.")
+                #print(f"[INFO] No improvement for {patience} iterations, stopping early.")
                 break
 
             temperature *= cooling_rate
@@ -165,20 +168,21 @@ class HydraSimulator:
             print("[ERROR] Players or Hydras not initialized. Aborting simulation.")
             return None, None, None
 
-        print("[INFO] Starting simulation round...")
+        #print("[INFO] Starting simulation round...")
         cycle = Cycle(self.players, self.hydras)
         best_assignment, score = self.simulated_annealing(cycle)
 
-        print(f"[RESULT] Best assignment found | Total Score: {score}")
-        print("-" * 50)
-        print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
+        
+        #print(f"[RESULT] Best assignment found | Total Score: {score}")
+        #print("-" * 50)
+        #print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
 
-        for player, attacks in best_assignment.items():
-            if player in ("raf41983", "Freya"):
-                for hydra_name, head_name in attacks:
-                    print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+        #for player, attacks in best_assignment.items():
+        #    if player in ("raf41983", "Freya"):
+        #        for hydra_name, head_name in attacks:
+        #            print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
 
-        print("-" * 50)
+        #print("-" * 50)
         return best_assignment, score
 
     def runBruteforce(self):
@@ -247,6 +251,40 @@ class HydraSimulator:
         print(f"Total heads killed: {heads_killed} / {total_heads}")
         print(f"Total score: {score:,}")
 
+import concurrent.futures
+
+def run_single_simulation(csv_path):
+    sim = HydraSimulator(csv_path)
+    if not sim.load_data():
+        return None, 0
+    return sim.run_simulation()  # returns assignment, score
+
+def run_parallel_simulations(csv_path, n_simulations=100, max_workers=os.cpu_count() - 1, print_every=10):
+    results = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(run_single_simulation, csv_path) for _ in range(n_simulations)]
+
+        completed = 0
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                assignment, score = future.result()
+                if assignment is not None:
+                    results.append((assignment, score))
+            except Exception as e:
+                print(f"[ERROR] Simulation failed: {e}")
+
+            completed += 1
+            # Print progress every `print_every` simulations or at the end
+            if completed % print_every == 0 or completed == n_simulations:
+                best_assignment, best_score = max(results, key=lambda x: x[1]) if results else (None, 0)
+                print(f"\n[INFO] Completed {completed} / {n_simulations} simulations. Current best score: {best_score}")
+
+    if not results:
+        return None, 0
+
+    best_assignment, best_score = max(results, key=lambda x: x[1])
+    return best_assignment, best_score
+
 
 
    
@@ -254,7 +292,7 @@ class HydraSimulator:
 
 if __name__ == "__main__":
     simulator = HydraSimulator(r'.\Hero Wars - Brasil - HydraHelperSheet.csv')
-    input_string = input("press SA to start simulated annealing, otherwise press any for brute force: ")
+    input_string = input("press SA to start simulated annealing, P for Parallel runs, otherwise press any for brute force: ")
     
 
     if simulator.load_data():
@@ -281,6 +319,22 @@ if __name__ == "__main__":
                     print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
             print("-" * 50)
             
+        if input_string == "P":
+            try:
+                n_sim = int(input("Enter number of simulations to run: "))
+            except ValueError:
+                n_sim = 100  # default fallback
+            print("[INFO] Running parallel simulations...")
+            best_assignment, highest_score = run_parallel_simulations(simulator.csv_path, n_simulations=n_sim, max_workers=8)
+            print(f"\n[FINAL RESULT] Best assignment from parallel runs with score: {highest_score}")
+            print("-" * 50)
+            print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
+            for player, attacks in best_assignment.items():
+                for hydra_name, head_name in attacks:
+                    print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+            print("-" * 50)
+
+        
             
         else:
             print("[INFO] Running brute force simulation...")

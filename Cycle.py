@@ -50,7 +50,7 @@ class Cycle:
 
         return self.current_value
 
-    def brute_force(self, max_attempts=10000):
+    def brute_force(self, max_attempts=1000000):
         best_assignment = None
         best_value = 0
 
