@@ -2,12 +2,13 @@ import pandas as pd
 import random
 import math
 import os
-
+import csv
 
 from Player import Player
 from Hydra import Hydra
 from Head import Head
 from Cycle import Cycle
+from collections import defaultdict
 
 
 
@@ -228,12 +229,32 @@ class HydraSimulator:
         for target in self.target_order:
             if target not in summary:
                 continue
+
             print(f"\n{target}:")
-            total = 0
+            total_damage = 0
+
             for player_name, damage in summary[target]:
-                total += damage
+                if damage == 0:
+                    continue  # Skip players with 0 damage
+                total_damage += damage
                 print(f"  {player_name:<20} {damage:>12,}")
-            print(f"{'TOTAL':<22} {total:>12,}")
+
+            # Extract head and hydra names from target
+            try:
+                head_name, hydra_name = [s.strip() for s in target.split(" - ")]
+            except ValueError:
+                print("  [ERROR] Invalid target format")
+                continue
+
+            # Find the head object to compute remaining HP
+            hydra = next((h for h in self.hydras if h.name == hydra_name), None)
+            head = next((hd for hd in hydra.heads if hd.name == head_name), None) if hydra else None
+
+            if head:
+                remaining_hp = max(head.startHealth - total_damage, 0)
+                print(f"{'REMAINING HP':<22} {remaining_hp:>12,}")
+            else:
+                print(f"{'REMAINING HP':<22} {'N/A':>12}")
 
         print("-" * 50)
 
@@ -250,6 +271,94 @@ class HydraSimulator:
         print("\n[FINAL SUMMARY]")
         print(f"Total heads killed: {heads_killed} / {total_heads}")
         print(f"Total score: {score:,}")
+
+
+    def export_assignment_summary_csv(self, assignment, score, filename="assignment_summary_long.csv"):
+        summary = defaultdict(list)
+
+        # Build summary dictionary: target -> list of (player_name, damage)
+        for player in self.players:
+            if player.name not in assignment:
+                continue
+            for hydra_name, head_name in assignment[player.name]:
+                target = f"{head_name} - {hydra_name}"
+                hydra = next((h for h in self.hydras if h.name == hydra_name), None)
+                if not hydra:
+                    continue
+                head = next((hd for hd in hydra.heads if hd.name == head_name), None)
+                if not head:
+                    continue
+                damage = player.DamageToHead(hydra, head)
+                summary[target].append((player.name, damage))
+
+        with open(filename, mode='w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+
+            # Write header
+            writer.writerow(["Target", "Person", "Damage", "Target Total"])
+
+            targets_killed = 0
+
+            for target in self.target_order:
+                players = summary.get(target, [])
+                total_damage = sum(dmg for _, dmg in players)
+
+                if not players:
+                    # No one attacked this target
+                    writer.writerow([target, "", "❌ Unreachable", 0])
+                    writer.writerow([target, "", "❌ Unreachable", 0])
+                    continue
+
+                # Find the head and startHealth to know kill threshold
+                try:
+                    head_name, hydra_name = [s.strip() for s in target.split(" - ")]
+                    hydra = next((h for h in self.hydras if h.name == hydra_name), None)
+                    head = next((hd for hd in hydra.heads if hd.name == head_name), None) if hydra else None
+                    if not head:
+                        raise ValueError("Head not found")
+                    start_health = head.startHealth
+                except Exception:
+                    # If can't find head info, write all players anyway (fallback)
+                    for player_name, damage in players:
+                        if damage > 0:
+                            writer.writerow([target, player_name, damage, ""])
+                    writer.writerow([target, "", "❌ Unknown Target", 0])
+                    continue
+
+                # Sort players by damage descending
+                players_sorted = sorted(players, key=lambda x: x[1], reverse=True)
+
+                accumulated = 0
+                required_players = []
+                for player_name, damage in players_sorted:
+                    if damage == 0:
+                        continue
+                    if accumulated < start_health:
+                        required_players.append((player_name, damage))
+                        accumulated += damage
+                    else:
+                        # Already reached kill threshold
+                        break
+
+                # Write only required players
+                for player_name, damage in required_players:
+                    writer.writerow([target, player_name, damage, ""])
+
+                # Write reached/not reached summary row
+                if accumulated >= start_health:
+                    writer.writerow([target, "", "✅ Reached", start_health])
+                    targets_killed += 1
+                else:
+                    writer.writerow([target, "", "❌ Not Reached", 0])
+
+            # Write summary rows
+            writer.writerow([])
+            writer.writerow(["Targets Killed", targets_killed, "", ""])
+            writer.writerow(["Total Value", score, "", ""])
+
+
+
+
 
 import concurrent.futures
 
@@ -328,11 +437,11 @@ if __name__ == "__main__":
             best_assignment, highest_score = run_parallel_simulations(simulator.csv_path, n_simulations=n_sim, max_workers=8)
             print(f"\n[FINAL RESULT] Best assignment from parallel runs with score: {highest_score}")
             print("-" * 50)
-            print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
-            for player, attacks in best_assignment.items():
-                for hydra_name, head_name in attacks:
-                    print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
-            print("-" * 50)
+            #print(f"{'Player':<25} {'Hydra':<15} {'Head':<15}")
+            #for player, attacks in best_assignment.items():
+            #    for hydra_name, head_name in attacks:
+            #        print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
+            #print("-" * 50)
 
         
             
@@ -356,4 +465,6 @@ if __name__ == "__main__":
 
         # Now print the summary with correct health states
         simulator.print_assignment_summary(best_assignment, highest_score)
+        simulator.export_assignment_summary_csv(best_assignment, highest_score, "my_hydra_summary.csv")
+
     
