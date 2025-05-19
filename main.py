@@ -188,7 +188,14 @@ class HydraSimulator:
 
         print("[INFO] Starting brute force simulation round...")
         cycle = Cycle(self.players, self.hydras)
-        return cycle.brute_force(max_attempts=10000)
+        raw_assignment, score = cycle.brute_force(max_attempts=10000)
+
+        # Convert from attack_log list to expected dict format
+        assignment_dict = {}
+        for player_name, hydra_name, head_name, damage, worth in raw_assignment:
+            assignment_dict.setdefault(player_name, []).append((hydra_name, head_name))
+
+        return assignment_dict, score
     
     def print_assignment_summary(self, assignment, score):
         from collections import defaultdict
@@ -273,7 +280,8 @@ if __name__ == "__main__":
                 for hydra_name, head_name in attacks:
                     print(f"{player:<25} {hydra_name:<15} {head_name:<15}")
             print("-" * 50)
-            simulator.print_assignment_summary(best_assignment, highest_score)
+            
+            
         else:
             print("[INFO] Running brute force simulation...")
             best_assignment, score = simulator.runBruteforce()
@@ -283,4 +291,15 @@ if __name__ == "__main__":
             for best in best_assignment:
                 print(f"{best}")
             print("-" * 50)
+
+        # For use in print_assignment_summary
+        # Reset hydras and players so healths and attacks_left are fresh
+        simulator.reset_battle_state()
+
+        # Apply the best assignment to update heads' health properly
+        cycle = Cycle(simulator.players, simulator.hydras)
+        cycle.apply_assignment(best_assignment)
+
+        # Now print the summary with correct health states
+        simulator.print_assignment_summary(best_assignment, highest_score)
     
